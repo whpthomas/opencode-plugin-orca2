@@ -5,6 +5,7 @@ import { Variables } from './variables.js';
 import { log } from './logger.js';
 import { Task, TaskState } from './task.js';
 import { Machine, Status } from './types.js';
+import { getFileType, generateEvalHTML, type Comparison } from './evaluate.js';
 
 export class Step {
   readonly name: string;
@@ -24,6 +25,7 @@ export class Step {
   readonly loop?: string;
   readonly process: boolean;
   readonly concatenate?: string;
+  readonly evaluate?: string;
 
   readonly machine: Machine;
   tasks: Task[] = [];
@@ -47,6 +49,7 @@ export class Step {
       loop?: string;
       process?: boolean;
       concatenate?: string;
+      evaluate?: string;
     } = {}
   ) {
     this.name = name;
@@ -66,6 +69,7 @@ export class Step {
     this.loop = opts.loop;
     this.process = opts.process ?? false;;
     this.concatenate = opts.concatenate;
+    this.evaluate = opts.evaluate;
     if (this.iterate) {
       this.machine = Machine.ITERATE;
     } else if (this.while) {
@@ -97,6 +101,7 @@ export class Step {
       loop: config.loop,
       process: config.process,
       concatenate: config.concatenate,
+      evaluate: config.evaluate,
     });
   }
 
@@ -305,10 +310,84 @@ export class Step {
   }
 
   end(variables: Variables): boolean {
+    let success = true;
+
     if (this.concatenate) {
-      return this.cat(variables);
+      success = this.cat(variables) && success;
     }
-    return true;
+
+    if (this.evaluate) {
+      success = this.eval(variables) && success;
+    }
+
+    return success;
+  }
+
+  eval(variables: Variables): boolean {
+    if (!this.evaluate || !this.output) {
+      log('WARN', `Step '${this.name}' has no evaluate or output defined, cannot generate HTML`);
+      return false;
+    }
+
+    const pathDir = this.pathDir(variables);
+    if (!pathDir || !fs.existsSync(pathDir)) {
+      log('WARN', `Evaluate '${this.name}' output directory not found`);
+      return false;
+    }
+
+    let entries: string[];
+    try {
+      entries = fs.readdirSync(pathDir);
+    } catch {
+      log('WARN', `Evaluate '${this.name}' output directory not readable`);
+      return false;
+    }
+
+    entries.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+
+    const comparisons: Comparison[] = [];
+
+    for (let i = 0; i < entries.length; i++) {
+      const filename = entries[i];
+      const each = path.basename(filename, path.extname(filename));
+      const index = i + 1;
+
+      variables.setTask(each, index, this.input, this.output);
+
+      const sourcePath = variables.resolve(this.evaluate!);
+      const outputPath = variables.output;
+
+      const sourceType = sourcePath && fs.existsSync(sourcePath) ? getFileType(sourcePath) : 'missing';
+      const outputType = outputPath && fs.existsSync(outputPath) ? getFileType(outputPath) : 'missing';
+
+      comparisons.push({
+        sourcePath,
+        sourceType,
+        outputPath,
+        outputType,
+        each,
+        index,
+      });
+    }
+
+    variables.clearTask();
+
+    const htmlPath = path.join(variables.jobPath, `${this.name}.html`);
+    const html = generateEvalHTML(this.name, variables.jobName, comparisons, htmlPath);
+    const htmlDir = path.dirname(htmlPath);
+
+    if (!fs.existsSync(htmlDir)) {
+      fs.mkdirSync(htmlDir, { recursive: true });
+    }
+
+    try {
+      fs.writeFileSync(htmlPath, html, 'utf-8');
+      log('INFO', `Generated evaluation HTML: ${htmlPath}`);
+      return true;
+    } catch {
+      log('WARN', `Failed to write evaluation HTML for step '${this.name}'`);
+      return false;
+    }
   }
 }
 

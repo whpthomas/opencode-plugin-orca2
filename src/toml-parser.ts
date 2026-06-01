@@ -17,7 +17,7 @@ const VALID_STEP_KEYS = new Set([
   'name', 'description', 'prompt', 'input', 'output',
   'retry', 'dialog', 'sequential', 'parallel',
   'iterate', 'while', 'loop', 'process', 'concatenate',
-  'generate', 'HITL'
+  'generate', 'HITL', 'evaluate'
 ]);
 
 export function parseWorkflowTOML(workflowName: string, basePath?: string): { config: TOMLWorkflowConfig; filePath: string } | ParseError {
@@ -169,6 +169,13 @@ export function parseWorkflowTOML(workflowName: string, basePath?: string): { co
         return new ParseError(`Step '${rawStep.name}' invalid field`, 'concatenate must be a string');
       }
       step.concatenate = rawStep.concatenate;
+    }
+
+    if (rawStep.evaluate !== undefined) {
+      if (typeof rawStep.evaluate !== 'string') {
+        return new ParseError(`Step '${rawStep.name}' invalid field`, 'evaluate must be a string');
+      }
+      step.evaluate = rawStep.evaluate;
     }
 
     config.step.push(step);

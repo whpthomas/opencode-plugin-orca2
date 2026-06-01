@@ -262,7 +262,10 @@ export class WorkflowState {
   }
 
   // Reset context - clears all messages from session
-  async resetContext(): Promise<void> {
+  async resetContext(step: Step): Promise<void> {
+    if(!step.sequential && !step.parallel) {
+      // Reset context for non-sequential steps
+      this.workflow.trace(`Resetting context for step '${step.name}'`);
       const client = getClient()
       if (!client?.session) {
           this.workflow.warn('OpenCode client not available for reset')
@@ -291,7 +294,8 @@ export class WorkflowState {
           count++
       }
       
-      this.workflow.info(`Cleared ${count} messages from session`)
+      this.workflow.info(`Cleared ${count} messages from session`);
+    }
   }
 
   private async transition(step: Step): Promise<State> {
@@ -300,10 +304,6 @@ export class WorkflowState {
       // Capture checkpoint
       this.workflow.trace('Storing checkpoint');
       await this.setCheckpoint();
-    } else if(!step.sequential && !step.parallel) {
-      // Reset context for non-sequential steps
-      this.workflow.trace(`Resetting context for step '${step.name}'`);
-      await this.resetContext();
     }
     if (step.dialog) {
       // Send first prompt while PENDING, then transition to PAUSED to wait for user input
@@ -361,6 +361,7 @@ export class WorkflowState {
             return await this.transition(step);
           case Status.SUBTASK_COMPLETE:
           case Status.STEP_DONE:
+            await this.resetContext(step);
             return await this.advance(step, stepState.retry);
           case Status.HALT:
             workflow.trace(`Step '${step.name}' error — retries exhausted`);
@@ -375,6 +376,7 @@ export class WorkflowState {
           case Status.SUBTASK_COMPLETE:
           case Status.STEP_DONE:
             step.end(variables);
+            await this.resetContext(step);
             return await this.advance(step, stepState.retry);
           case Status.HALT:
             workflow.trace(`Generate step '${step.name}' error — retries exhausted`);
@@ -389,6 +391,7 @@ export class WorkflowState {
             return await this.transition(step);
           case Status.STEP_DONE:
             step.end(variables);
+            await this.resetContext(step);
             return await this.advance(step, stepState.retry);
           case Status.HALT:
             workflow.trace(`Iterate step '${step.name}' error — retries exhausted`);
@@ -414,10 +417,13 @@ export class WorkflowState {
                 this.state = State.ERROR;
                 return this.state;
               }
+              await this.resetContext(step);
               workflow.trace(`Looping to step '${loop.name}'`);
               return await this.transition(loop);
             }
           case Status.STEP_DONE:
+            step.end(variables);
+            await this.resetContext(step);
             return await this.advance(step, stepState.retry);
           case Status.HALT:
             workflow.trace(`While step '${step.name}' error — retries exhausted`);
@@ -432,6 +438,7 @@ export class WorkflowState {
             return await this.transition(step);
           case Status.STEP_DONE:
             step.end(variables);
+            await this.resetContext(step);
             return await this.advance(step, stepState.retry);
           case Status.HALT:
             workflow.trace(`Process step '${step.name}' error — retries exhausted`);

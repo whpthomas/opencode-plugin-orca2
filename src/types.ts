@@ -15,6 +15,7 @@ export interface TOMLStepConfig {
   loop?: string;
   process?: boolean;
   concatenate?: string;
+  evaluate?: string;
 }
 
 export interface TOMLWorkflowConfig {

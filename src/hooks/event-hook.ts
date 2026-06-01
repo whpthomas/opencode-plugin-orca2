@@ -50,7 +50,7 @@ async function subtaskComplete(sessionID: string) {
     if (state) {
       const workflow = state.workflow;
         state.subtaskTokens += tokens;
-        workflow.trace(`Subtask ${subtask.index + 1} ${state.stepName} ${subtask.name} completed, ${tokens} tokens, ${remaining} remaining`);
+        workflow.trace(`Subtask ${subtask.index} ${state.stepName} ${subtask.name} completed, ${tokens} tokens, ${remaining} remaining`);
         state.stats?.endSubtask(sessionID, tokens, subtask.retry);
     }
     if(remaining === 0) {
@@ -111,7 +111,7 @@ async function waitForSubtask(client: any, sessionID: string, state: WorkflowSta
               for(const childID of subtasks) {
                   const subtask = subtaskLookup.get(childID);
                   if(subtask) {
-                      parts.push(`Subtask ${subtask.index + 1} ${state.stepName} ${subtask.name}, ${subtask.tokens.toLocaleString()} tokens`);
+                      parts.push(`Subtask ${subtask.index} ${state.stepName} ${subtask.name}, ${subtask.tokens.toLocaleString()} tokens`);
                       if(20 < n++) {
                           break;
                       } 
@@ -185,7 +185,7 @@ async function spawnParallelSubtasks(client: any, sessionID: string, subtasks: S
     const session = await client.session.create({
       body: {
         parentID: sessionID,
-        title: `${state.stepName} subtask ${subtask.index + 1}/${subtasks.length}`,
+        title: `${state.stepName} subtask ${subtask.index}/${subtasks.length}`,
       }
     });
 
@@ -231,7 +231,7 @@ export async function event(input: any) {
         if (state) {
             const workflow = state.workflow;
             if(subtask.epoc == 0) {
-                workflow.trace(`Subtask ${subtask.index + 1} ${state.stepName} ${subtask.name} created`);
+                workflow.trace(`Subtask ${subtask.index} ${state.stepName} ${subtask.name} created`);
             }
             subtask.epoc = state.nextEpoc();
         }
@@ -261,7 +261,7 @@ export async function event(input: any) {
     return;
   }
   const workflow = state.workflow;
-  workflow.trace('Session idle event');
+  //workflow.trace('Session idle event');
 
   let currentState = state.state;
   const count = workflow.retry * workflow.steps.length * 2;
@@ -276,6 +276,9 @@ export async function event(input: any) {
     currentState = await state.update();
 
     switch(currentState) {
+      // @ts-ignore - intentional fallthrough
+      case State.PENDING:
+        workflow.trace('Sending dialog prompt');
       case State.FIRST:
       case State.NEXT:
         const subtasks = state.build(resumed);
