@@ -1,0 +1,54 @@
+{
+  "name": "opencode-plugin-orca2",
+  "version": "0.2.0",
+  "description": "OpenCode plugin for orchestrating agentic workflows via TOML definitions with file-based state management",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "keywords": [
+    "opencode",
+    "plugin",
+    "workflow",
+    "orchestration",
+    "agentic",
+    "toml"
+  ],
+  "repository": "git+https://github.com/whpthomas/opencode-plugin-orca2.git",
+  "author": "whpthomas",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/whpthomas/opencode-plugin-orca2/issues"
+  },
+  "homepage": "https://github.com/whpthomas/opencode-plugin-orca2#readme",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist",
+    "test": "bun test",
+    "test:e2e": "bun test test/e2e/**/*.test.ts",
+    "test:unit": "bun test test/unit/**/*.test.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "peerDependencies": {
+    "@opencode-ai/plugin": "^1.4.3",
+    "@opencode-ai/sdk": "^1.4.5"
+  },
+  "dependencies": {
+    "smol-toml": "^1.6.1"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.1",
+    "bun-types": "^1.1.0",
+    "typescript": "^5.4.5"
+  }
+}

@@ -1,0 +1,40 @@
+description = "Question, research, design, plan, and implement pipeline"
+retry = 3
+debug = true
+
+[[step]]
+name = "questions"
+description = "Ask questions and capture design brief"
+dialog = true
+prompt = "prompt.md"
+output = "design-brief.md"
+
+[[step]]
+name = "research"
+description = "Research codebase"
+sequential = true
+prompt = ["prompt.md", "design-brief.md"]
+output = "research.md"
+
+[[step]]
+name = "design"
+description = "Design alignment"
+sequential = true
+dialog = true
+prompt = ["prompt.md","design-brief.md", "research.md"]
+output = "design.md"
+
+[[step]]
+name = "plan"
+description = "Create technical plan"
+generate = true
+prompt = ["design-brief.md", "research.md", "design.md"]
+output = "$EACH.md"
+
+[[step]]
+name = "implement"
+description = "Implement technical plan $INDEX"
+iterate = "plan"
+input = "plan/$EACH.md"
+prompt = ["research.md", "design.md"]
+output = "report-$INDEX.md"

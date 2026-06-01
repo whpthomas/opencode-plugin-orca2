@@ -1,0 +1,28 @@
+description = "Extract semantic information from pdf files"
+single_file = true
+debug = true
+retry = 5
+stats = true
+
+[[step]]
+name = "pdf2img"
+description = "Convert pdf to png page images"
+generate = true
+output = "$EACH.png"
+
+[[step]]
+name = "transcribe"
+description = "Transcribe page images to text"
+parallel = true
+iterate = "pdf2img"
+output = "$EACH.md"
+concatenate = "doc.md"
+
+[[step]]
+name = "extract"
+description = "Extract semantic data from content"
+parallel = true
+process = true
+prompt = ["doc.md"]
+output = "$EACH.toml"
+concatenate = "$PROCESS-extracted.toml"

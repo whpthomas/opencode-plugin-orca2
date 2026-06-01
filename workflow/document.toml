@@ -1,0 +1,10 @@
+description = "Document sourcecode"
+debug = true
+retry = 5
+
+[[step]]
+name = "document"
+description = "Document each listed file"
+parallel = true
+iterate = "$PROCESS"
+output = "$EACH-doc.md"

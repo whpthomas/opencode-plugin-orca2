@@ -1,0 +1,36 @@
+description = "Extract semantic information from pdf files"
+single_file = true
+debug = true
+retry = 5
+
+[[step]]
+name = "pdf2img"
+description = "Convert pdf to png page images"
+generate = true
+output = "$EACH.png"
+
+[[step]]
+name = "transcribe"
+description = "Transcribe page images to text"
+parallel = true
+iterate = "pdf2img"
+output = "$EACH.md"
+concatenate = "doc.md"
+
+[[step]]
+name = "index"
+description = "Index page content semantic info"
+parallel = true
+iterate = "pdf2img"
+input = "transcribe/$EACH.md"
+output = "$EACH.md"
+concatenate = "toc.md"
+
+[[step]]
+name = "extract"
+description = "Extract semantic data from content index"
+parallel = true
+process = true
+prompt = ["toc.md"]
+output = "$EACH.md"
+concatenate = "$PROCESS-extracted.md"

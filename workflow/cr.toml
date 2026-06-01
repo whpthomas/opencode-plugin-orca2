@@ -1,0 +1,26 @@
+description = "Code review and revision pipeline"
+retry = 3
+debug = true
+
+[[step]]
+name = "review"
+description = "Review implementation and ask questions"
+dialog = true
+prompt = ["design-brief.md", "research.md", "design.md"]
+output = "review.md"
+
+[[step]]
+name = "revise"
+description = "Plan revisions based on the review"
+sequential = true
+generate = true
+prompt = ["review.md", "design-brief.md", "research.md", "design.md"]
+output = "$EACH.md"
+
+[[step]]
+name = "implement"
+description = "Implement revision $INDEX"
+iterate = "revise"
+input = "revise/$EACH.md"
+prompt = ["review.md", "research.md", "design.md"]
+output = "change-$INDEX.md"
