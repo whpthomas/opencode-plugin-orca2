@@ -6,6 +6,7 @@ import { log } from './logger.js';
 import { Task, TaskState } from './task.js';
 import { Machine, Status } from './types.js';
 import { getFileType, generateEvalHTML, type Comparison } from './evaluate.js';
+import { generateProcessEval } from './evaluate-process.js';
 
 export class Step {
   readonly name: string;
@@ -313,7 +314,7 @@ export class Step {
     let success = true;
 
     if (this.concatenate) {
-      success = this.cat(variables) && success;
+      success = this.cat(variables);
     }
 
     if (this.evaluate) {
@@ -324,6 +325,11 @@ export class Step {
   }
 
   eval(variables: Variables): boolean {
+    // Check for process evaluation mode
+    if (this.process && this.concatenate && this.evaluate) {
+      return this.evalProcess(variables);
+    }
+
     if (!this.evaluate || !this.output) {
       log('WARN', `Step '${this.name}' has no evaluate or output defined, cannot generate HTML`);
       return false;
@@ -389,6 +395,48 @@ export class Step {
       return false;
     }
   }
+
+  /**
+   * Evaluate process step with concatenated TOML output.
+   * Generates an HTML page showing TOML tables grouped by page,
+   * side-by-side with source page images.
+   * 
+   * @param variables - Variables instance for path resolution
+   * @returns true if successful, false otherwise
+   */
+  private evalProcess(variables: Variables): boolean {
+    if (!this.concatenate || !this.evaluate) {
+      log('WARN', `Step '${this.name}' has no concatenate or evaluate defined, cannot generate process HTML`);
+      return false;
+    }
+
+    // Resolve the concatenated TOML file path
+    const tomlPath = variables.resolve(this.concatenate);
+    if (!tomlPath || !fs.existsSync(tomlPath)) {
+      log('WARN', `Concatenated TOML file not found: ${tomlPath}`);
+      return false;
+    }
+
+    // Get job path for resolving source images
+    const jobPath = variables.jobPath;
+
+    // Generate HTML file path
+    const htmlPath = path.join(jobPath, `${this.name}.html`);
+
+    // Get step name and job name for HTML title
+    const stepName = this.name;
+    const jobName = variables.jobName;
+
+    try {
+      // Generate the process evaluation HTML
+      generateProcessEval(tomlPath, jobPath, stepName, jobName, htmlPath);
+      log('INFO', `Generated process evaluation HTML: ${htmlPath}`);
+      return true;
+    } catch (error) {
+      log('WARN', `Failed to generate process evaluation HTML for step '${this.name}': ${error}`);
+      return false;
+    }
+  }
 }
 
 export class StepState {
@@ -396,6 +444,7 @@ export class StepState {
   retry: number = 0;
   tasks: TaskState[] = [];
   status: Status = Status.PENDING;
+  output: string | null = null;
 
   taskStatus(task: number): Status {
     if (task < 0 || task >= this.tasks.length) {
@@ -415,7 +464,8 @@ export class StepState {
 
     if(step.machine === Machine.STEP) {
       // Check if step output exists
-      if(variables.exists(step.output)) {
+      this.output = variables.resolve(step.output);
+      if(this.output && fs.existsSync(this.output)) {
         this.status = Status.STEP_DONE;
         return this.status;
       }

@@ -1,22 +1,39 @@
+import * as fs from 'fs';
 import { log } from '../logger.js';
 import { getClient, getWorkflow, removeWorkflow } from '../state.js';
 import { WorkflowState } from '../workflow.js';
 import { Subtask } from '../subtask.js';
 import { State } from '../types.js'
 
+// Map of parent session ID to set of child session IDs
 const subtaskMap = new Map<string, Set<string>>();
+// Map of session ID to Subtask details
 const subtaskLookup = new Map<string, Subtask>();
 
-function cleanupSubtask(sessionID: string) {
+async function cleanupSubtask(client: any, sessionID: string): Promise<boolean> {
   const subtask = subtaskLookup.get(sessionID);
   if (subtask) {
-    subtaskLookup.delete(sessionID);
-    const set = subtaskMap.get(subtask.parentID);
-    if (set) {
-      set.delete(sessionID);
-      if (set.size === 0) {
-        subtaskMap.delete(subtask.parentID);
+    if(subtask.output && fs.existsSync(subtask.output)) {
+      subtaskLookup.delete(sessionID);
+      const set = subtaskMap.get(subtask.parentID);
+      if (set) {
+        set.delete(sessionID);
+        if (set.size === 0) {
+          subtaskMap.delete(subtask.parentID);
+        }
       }
+    } else if(subtask.retry < 3) {
+        await client.session.prompt({
+            path: { id: sessionID },
+            body: {
+                parts: [{
+                    type: "text",
+                    text: "Please Continue"
+                }]
+            }
+        });
+        subtask.retry++;
+        return false;
     }
   }
   // Also clean up any child subtasks if this session is a parent
@@ -27,6 +44,7 @@ function cleanupSubtask(sessionID: string) {
     }
     subtaskMap.delete(sessionID);
   }
+  return true;
 }
 
 function subtaskLink(parentID: string, sessionID: string, subtask: Subtask) {
@@ -250,14 +268,15 @@ export async function event(input: any) {
   const client = getClient();
   if (!client) {
     log('ERROR', 'event() no client available');
-    cleanupSubtask(sessionID);
-    removeWorkflow(sessionID);
+    if(await cleanupSubtask(client, sessionID)) {
+      removeWorkflow(sessionID);
+    }
     return;
   }
 
   const state = getWorkflow(sessionID);
   if (!state) {
-    cleanupSubtask(sessionID);
+    await cleanupSubtask(client, sessionID);
     return;
   }
   const workflow = state.workflow;
@@ -287,7 +306,7 @@ export async function event(input: any) {
           return;
         }
         if (subtasks.length > 1) {
-          workflow.trace(`${State[currentState]} ${subtasks.length} ${state.stepName} subtasks`);
+          workflow.trace(`${State[currentState]} ${subtasks.length} ${state.stepName} parallel subtasks`);
           await spawnParallelSubtasks(client, sessionID, subtasks, state);
           await waitForSubtask(client, sessionID, state);
         } else if (state.parallel) {
@@ -308,12 +327,12 @@ export async function event(input: any) {
         return;
       case State.ERROR:
         workflow.trace(`Workflow halted, removing ${sessionID}`);
-        cleanupSubtask(sessionID);
+        await cleanupSubtask(client, sessionID);
         loop = false;
         break;
       case State.DONE:
         workflow.info(`Workflow complete - no more prompts, removing ${sessionID}`);
-        cleanupSubtask(sessionID);
+        await cleanupSubtask(client, sessionID);
         loop = false;
     }
   }

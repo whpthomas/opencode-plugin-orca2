@@ -7,6 +7,7 @@ stats = true
 [[step]]
 name = "pdf2img"
 description = "Convert pdf to png page images"
+sequential = true
 generate = true
 output = "$EACH.png"
 
@@ -16,8 +17,8 @@ description = "Transcribe page images to text"
 parallel = true
 iterate = "pdf2img"
 output = "$EACH.md"
-evaluate = "pdf2img/$EACH.png"
 concatenate = "doc.md"
+evaluate = "pdf2img/$EACH.png"
 
 [[step]]
 name = "extract"
@@ -27,3 +28,4 @@ process = true
 prompt = ["doc.md"]
 output = "$EACH.toml"
 concatenate = "$PROCESS-extracted.toml"
+evaluate = "pdf2img/$EACH.png"

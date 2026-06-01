@@ -10,6 +10,28 @@ export type Comparison = {
   index: number;
 };
 
+// Process evaluation types
+
+export type ProcessTable = {
+  tableId: string;           // e.g. "commercial-electricity-tariff"
+  arrayIndex: number | null; // index for array-of-tables, null for scalar
+  totalArrayItems: number;   // total items if array-of-tables, 1 for scalar
+  fields: Record<string, unknown>;  // all TOML fields (page, value, unit, notes, etc.)
+};
+
+export type ProcessComparison = {
+  pageNum: number | null;    // page number or null for undefined/"no"
+  sourcePath: string | null; // pdf2img/page-N.png or null
+  sourceType: string;        // 'image' | 'missing' | 'text'
+  tables: ProcessTable[];    // all tables referencing this page
+};
+
+export type ProcessEvalData = {
+  stepName: string;
+  jobName: string;
+  comparisons: ProcessComparison[];
+};
+
 export function getFileType(filePath: string): string {
   const ext = path.extname(filePath).toLowerCase();
   if (['.png', '.jpg', '.jpeg', '.gif', '.webp'].includes(ext)) {
@@ -277,5 +299,282 @@ export function generateEvalHTML(
       })();
     </script>
   </body>
+</html>`;
+}
+
+/**
+ * Helper function to escape HTML entities.
+ */
+function escapeHtml(text: string | number | boolean | undefined | null): string {
+  if (text === undefined || text === null) return '';
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+/**
+ * Render TOML table data as HTML key-value pairs.
+ * Handles both scalar and array-of-tables.
+ * 
+ * @param table - ProcessTable object
+ * @returns HTML string
+ */
+export function renderProcessContent(table: ProcessTable): string {
+  let html = '<div class="table-entry mb-3">';
+  
+  // Table header with ID and array index if applicable
+  html += `<h6 class="table-id">${escapeHtml(table.tableId)}`;
+  if (table.arrayIndex !== null) {
+    html += ` <span class="badge bg-secondary">${table.arrayIndex + 1}/${table.totalArrayItems}</span>`;
+  }
+  html += '</h6>';
+  
+  // Key-value pairs
+  html += '<dl class="row mb-0">';
+  
+  for (const [key, value] of Object.entries(table.fields)) {
+    html += '<dt class="col-sm-3 text-muted">' + escapeHtml(key) + '</dt>';
+    html += '<dd class="col-sm-9">';
+    
+    if (value === undefined) {
+      html += '<em class="text-muted">undefined</em>';
+    } else if (typeof value === 'string') {
+      html += escapeHtml(value);
+    } else if (typeof value === 'boolean') {
+      html += escapeHtml(String(value));
+    } else if (typeof value === 'number') {
+      html += escapeHtml(String(value));
+    } else if (Array.isArray(value)) {
+      html += escapeHtml(JSON.stringify(value));
+    } else if (typeof value === 'object' && value !== null) {
+      html += escapeHtml(JSON.stringify(value));
+    } else {
+      html += escapeHtml(String(value));
+    }
+    
+    html += '</dd>';
+  }
+  
+  html += '</dl>';
+  html += '</div>';
+  
+  return html;
+}
+
+/**
+ * Generate HTML for a single page group (all tables from that page).
+ * 
+ * @param comparison - ProcessComparison object
+ * @param index - 0-based index of this comparison
+ * @param htmlPath - HTML file path for relative path resolution
+ * @returns HTML string
+ */
+function renderPageGroup(comparison: ProcessComparison, index: number, htmlPath: string): string {
+  let html = `<div class="comparison-item" data-index="${index}" style="display: ${index === 0 ? 'block' : 'none'};">`;
+  html += '<div class="row g-3">';
+  
+  // Left column: Source page image
+  html += '<div class="col-md-6">';
+  html += '<div class="card">';
+  html += '<div class="card-header">';
+  html += `<strong>Source: Page ${comparison.pageNum ?? 'N/A'}</strong>`;
+  html += '</div>';
+  html += '<div class="card-body content-box">';
+  
+  if (comparison.sourcePath && comparison.sourceType === 'image') {
+    // Calculate relative path for the HTML file
+    const relativePath = htmlPath ? path.relative(path.dirname(htmlPath), comparison.sourcePath) : comparison.sourcePath;
+    html += `<img src="${escapeHtml(relativePath)}" class="img-fluid" alt="Page ${comparison.pageNum}">`;
+  } else {
+    html += '<div class="alert alert-warning">';
+    html += '<em>No source page available</em>';
+    html += '</div>';
+  }
+  
+  html += '</div>';
+  html += '</div>';
+  html += '</div>';
+  
+  // Right column: TOML table data
+  html += '<div class="col-md-6">';
+  html += '<div class="card">';
+  html += '<div class="card-header">';
+  html += '<strong>Extracted Data</strong>';
+  html += '</div>';
+  html += '<div class="card-body content-box">';
+  
+  if (comparison.tables.length === 0) {
+    html += '<em class="text-muted">No data extracted for this page</em>';
+  } else {
+    for (const table of comparison.tables) {
+      html += renderProcessContent(table);
+    }
+  }
+  
+  html += '</div>';
+  html += '</div>';
+  html += '</div>';
+  
+  html += '</div>';
+  html += '</div>';
+  
+  return html;
+}
+
+/**
+ * Generate a static HTML page for process evaluation.
+ * Displays TOML table values grouped by page, side-by-side with source images.
+ * 
+ * @param stepName - Step name for HTML title
+ * @param jobName - Job name for HTML title
+ * @param comparisons - Array of ProcessComparison objects
+ * @param htmlPath - Output path for the HTML file
+ * @returns Generated HTML string
+ */
+export function generateProcessEvalHTML(
+  stepName: string,
+  jobName: string,
+  comparisons: ProcessComparison[],
+  htmlPath: string
+): string {
+  const title = `Process Evaluation: ${stepName} (${jobName})`;
+  const totalItems = comparisons.length;
+  
+  let itemsHTML = '';
+  for (let i = 0; i < comparisons.length; i++) {
+    itemsHTML += renderPageGroup(comparisons[i], i, htmlPath);
+  }
+  
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${escapeHtml(title)}</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body {
+      background: #f8f9fa;
+    }
+    .content-box {
+      min-height: 200px;
+      background: #fff;
+      font-size: 0.925rem;
+      line-height: 1.65;
+      color: #212529;
+      padding: 1.25rem;
+    }
+    .content-box img {
+      max-width: 100%;
+      height: auto;
+    }
+    .table-entry {
+      border-bottom: 1px solid #dee2e6;
+      padding-bottom: 1rem;
+    }
+    .table-entry:last-child {
+      border-bottom: none;
+    }
+    .table-id {
+      color: #495057;
+      font-weight: 600;
+      font-size: 0.95rem;
+    }
+    dt {
+      font-weight: 400;
+    }
+    dd {
+      font-family: monospace;
+      font-size: 0.9rem;
+    }
+    .card {
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+    .card-header {
+      font-weight: 500;
+      font-size: 0.875rem;
+    }
+    .nav-controls {
+      position: sticky;
+      top: 0;
+      background: #f8f9fa;
+      padding: 0.75rem 0;
+      z-index: 100;
+      border-bottom: 1px solid #dee2e6;
+    }
+    .comparison-item {
+      padding: 1rem 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="nav-controls">
+    <div class="container-fluid">
+      <div class="d-flex justify-content-between align-items-center">
+        <span class="navbar-brand mb-0 h1">${escapeHtml(title)}</span>
+        <div class="d-flex align-items-center">
+          <button class="btn btn-outline-primary btn-sm me-2" id="prevBtn" ${totalItems <= 1 ? 'disabled' : ''}>
+            ← Previous
+          </button>
+          <span id="counter" class="me-2">1 / ${totalItems}</span>
+          <button class="btn btn-outline-primary btn-sm" id="nextBtn" ${totalItems <= 1 ? 'disabled' : ''}>
+            Next →
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <div class="container-fluid">
+    ${itemsHTML}
+  </div>
+  
+  <script>
+    (function() {
+      var currentIndex = 0;
+      var totalItems = ${totalItems};
+      var items = document.querySelectorAll('.comparison-item');
+      var prevBtn = document.getElementById('prevBtn');
+      var nextBtn = document.getElementById('nextBtn');
+      var counter = document.getElementById('counter');
+      
+      function showItem(index) {
+        items.forEach(function(item, i) {
+          item.style.display = i === index ? 'block' : 'none';
+        });
+        counter.textContent = (index + 1) + ' / ' + totalItems;
+        prevBtn.disabled = index === 0;
+        nextBtn.disabled = index === totalItems - 1;
+        currentIndex = index;
+      }
+      
+      prevBtn.addEventListener('click', function() {
+        if (currentIndex > 0) {
+          showItem(currentIndex - 1);
+        }
+      });
+      
+      nextBtn.addEventListener('click', function() {
+        if (currentIndex < totalItems - 1) {
+          showItem(currentIndex + 1);
+        }
+      });
+      
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'ArrowLeft' && currentIndex > 0) {
+          showItem(currentIndex - 1);
+        } else if (e.key === 'ArrowRight' && currentIndex < totalItems - 1) {
+          showItem(currentIndex + 1);
+        }
+      });
+      
+      // Initialize
+      showItem(0);
+    })();
+  </script>
+</body>
 </html>`;
 }

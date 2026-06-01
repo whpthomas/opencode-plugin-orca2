@@ -5,7 +5,6 @@ import { Variables } from './variables.js';
 import { parseWorkflowTOML, ParseError } from './toml-parser.js';
 import { Machine, NumberSetter, State, Status } from './types.js';
 import { Stats } from './stats.js';
-import { getClient } from './state.js';
 import { Subtask } from './subtask.js';
 import { TaskState } from './task.js';
 
@@ -202,6 +201,11 @@ export class WorkflowState {
     return step ? step.parallel : false;
   }
 
+  get sequential(): boolean {
+    const step = this.step;
+    return step ? step.sequential : false;
+  }
+
   get epoc(): number {
     return this.lastEpoc;
   }
@@ -246,64 +250,9 @@ export class WorkflowState {
     return step.taskStatus(task);
   }
 
-  // Store checkpoint at step boundaries
-  async setCheckpoint(): Promise<void> {
-      const client = getClient()
-      if (!client?.session) return
-      
-      const messages = await client.session.messages({ 
-          sessionID: this.sessionID 
-      })
-      
-      if (messages.length > 0) {
-          this.checkpoint = messages[0].info.id
-          this.workflow.info(`Checkpoint stored: ${this.checkpoint}`)
-      }
-  }
-
-  // Reset context - clears all messages from session
-  async resetContext(step: Step): Promise<void> {
-    if(!step.sequential && !step.parallel) {
-      // Reset context for non-sequential steps
-      this.workflow.trace(`Resetting context for step '${step.name}'`);
-      const client = getClient()
-      if (!client?.session) {
-          this.workflow.warn('OpenCode client not available for reset')
-          return
-      }
-      
-      const messages = await client.session.messages({ 
-          sessionID: this.sessionID 
-      })
-      
-      if (messages.length === 0) {
-          this.workflow.info('No messages to clear')
-          return
-      }
-
-      // Clear messages from the session
-      let count = 0;
-      for (const message of messages) {
-          if (message.info.id === this.checkpoint) {
-              break
-          }
-          await client.session.deleteMessage({
-              sessionID: this.sessionID,
-              messageID: message.info.id
-          })
-          count++
-      }
-      
-      this.workflow.info(`Cleared ${count} messages from session`);
-    }
-  }
-
   private async transition(step: Step): Promise<State> {
     if(this.state === State.FIRST) {
       this.stats?.beginStep(step.name, this.tokens);
-      // Capture checkpoint
-      this.workflow.trace('Storing checkpoint');
-      await this.setCheckpoint();
     }
     if (step.dialog) {
       // Send first prompt while PENDING, then transition to PAUSED to wait for user input
@@ -322,7 +271,7 @@ export class WorkflowState {
     this.currentStep++;
     const next = this.workflow.step(this.currentStep);
     if (!next ||this.currentStep >= this.steps.length) {
-      workflow.trace(`All steps done (index=${this.currentStep} >= length=${this.steps.length})`);
+      workflow.trace(`All steps done`);
       this.currentStep = -1;
       this.state = State.DONE;
       return this.state;
@@ -361,7 +310,6 @@ export class WorkflowState {
             return await this.transition(step);
           case Status.SUBTASK_COMPLETE:
           case Status.STEP_DONE:
-            await this.resetContext(step);
             return await this.advance(step, stepState.retry);
           case Status.HALT:
             workflow.trace(`Step '${step.name}' error — retries exhausted`);
@@ -376,7 +324,6 @@ export class WorkflowState {
           case Status.SUBTASK_COMPLETE:
           case Status.STEP_DONE:
             step.end(variables);
-            await this.resetContext(step);
             return await this.advance(step, stepState.retry);
           case Status.HALT:
             workflow.trace(`Generate step '${step.name}' error — retries exhausted`);
@@ -391,7 +338,6 @@ export class WorkflowState {
             return await this.transition(step);
           case Status.STEP_DONE:
             step.end(variables);
-            await this.resetContext(step);
             return await this.advance(step, stepState.retry);
           case Status.HALT:
             workflow.trace(`Iterate step '${step.name}' error — retries exhausted`);
@@ -417,13 +363,11 @@ export class WorkflowState {
                 this.state = State.ERROR;
                 return this.state;
               }
-              await this.resetContext(step);
               workflow.trace(`Looping to step '${loop.name}'`);
               return await this.transition(loop);
             }
           case Status.STEP_DONE:
             step.end(variables);
-            await this.resetContext(step);
             return await this.advance(step, stepState.retry);
           case Status.HALT:
             workflow.trace(`While step '${step.name}' error — retries exhausted`);
@@ -438,7 +382,6 @@ export class WorkflowState {
             return await this.transition(step);
           case Status.STEP_DONE:
             step.end(variables);
-            await this.resetContext(step);
             return await this.advance(step, stepState.retry);
           case Status.HALT:
             workflow.trace(`Process step '${step.name}' error — retries exhausted`);
@@ -462,7 +405,7 @@ export class WorkflowState {
     } else if(machine === Machine.STEP || machine === Machine.GENERATE) {
       const prompt = workflow.nextPrompt(this.currentStep, 0, resumed);
       if(prompt?.trim()) {
-        const subtask = new Subtask(step.name, 0, prompt, stepState.retry);
+        const subtask = new Subtask(step.name, 0, prompt, stepState.output, stepState.retry);
         subtasks.push(subtask);
       } else if (machine === Machine.STEP) {
         log('WARN', `Step '${step?.name}' prompt is empty`);
@@ -490,7 +433,7 @@ export class WorkflowState {
         }
         const prompt = workflow.nextPrompt(this.currentStep, currentTask, resumed);
         if(prompt?.trim()) {
-          const subtask = new Subtask(task.each, task.index, prompt, taskState.retry);
+          const subtask = new Subtask(task.each, task.index, prompt,  task.output, taskState.retry);
           subtasks.push(subtask);
         } else if(machine === Machine.PROCESS) {
             log('WARN', `Step '${step.name}' process '${task.each}' prompt is empty`);
