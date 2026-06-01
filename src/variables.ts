@@ -166,10 +166,10 @@ export class Variables {
     return resolved ? fs.existsSync(resolved) : false;
   }
 
-  load(fileText: string): string | null {
+  load(fileText: string, warn: boolean): string | null {
     const resolved = path.isAbsolute(fileText) ? fileText : this.resolve(fileText);
     if (!resolved || !fs.existsSync(resolved)) {
-      log('WARN', `File '${fileText}' not found`);
+      if(warn) log('WARN', `File '${fileText}' not found`);
       return null;
     }
     try {
@@ -185,41 +185,42 @@ export class Variables {
   buildPrompt(workflow: string, step: string, prompt: string[], fullPrompt: boolean): string {
     const parts: string[] = [];
 
-    // Add workflow context (if it exists)
+    // Add workflow context (optional)
     // e.g. <project>/workflow/<workflow>.md
     if (fullPrompt) {
-      const workflowContext = this.load(`./workflow/${workflow}.md`);
+      const workflowContext = this.load(`./workflow/${workflow}.md`, false);
       if (workflowContext?.trim()) parts.push(workflowContext);
     }
   
-    // Add step instructions (if it exists)
+    // Add step instructions (should exist)
     // e.g. <project>/workflow/<workflow>/<step>.md
-    const stepInstructions = this.load(`./workflow/${workflow}/${step}.md`);
+    const stepInstructions = this.load(`./workflow/${workflow}/${step}.md`, true);
     if (stepInstructions?.trim()) parts.push(stepInstructions);
 
-    // Add process prompt and instructions if in process mode
+    // Add process instructions if in process mode (should exist)
     // e.g. <project>/process/<process>/<each>.md
     if (this.processMode && this.processName) {
       if(this.each) {
-        const processPrompt = this.load(`./process/${this.processName}/${this.each}.md`);
+        const processPrompt = this.load(`./process/${this.processName}/${this.each}.md`, true);
         if (processPrompt?.trim()) parts.push(processPrompt);
       }
-      const processInstructions = this.load(`./process/${this.processName}.md`);
+      // Add general process prompt (optional)
+      const processInstructions = this.load(`./process/${this.processName}.md`, false);
       if (processInstructions?.trim()) parts.push(processInstructions);
     }
 
-    // Add subtask input prompt (if it exists) 
+    // Add subtask input prompt (should exist) 
     // e.g. <project>/<job>/<input>
     if (this.index > 0 && this.input) {
-      const taskPrompt = this.load(this.input);
+      const taskPrompt = this.load(this.input, true);
       if (taskPrompt?.trim()) parts.push(taskPrompt);
     }
 
-    // Add step prompts 
+    // Add step prompts (should exist)
     // e.g. <project>/<job>/<prompt>
     if (fullPrompt) {
       for (const filename of prompt) {
-        const content = this.load(filename);
+        const content = this.load(filename, true);
         // Skip missing prompts and empty files
         if(content?.trim()) parts.push(content);
       }

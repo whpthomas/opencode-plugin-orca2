@@ -274,11 +274,11 @@ export async function event(input: any) {
     }
     const resumed = state.resumed;
     currentState = await state.update();
-    const subtasks = state.build(resumed);
 
     switch(currentState) {
       case State.FIRST:
       case State.NEXT:
+        const subtasks = state.build(resumed);
         if(subtasks.length == 0) {
           workflow.info(`${State[currentState]} incomplete but no prompt`);
           return;

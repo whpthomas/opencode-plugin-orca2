@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { parse as tomlParse } from 'smol-toml';
+import * as toml from 'toml';
 import type { TOMLWorkflowConfig, TOMLStepConfig } from './types.js';
 import { log } from './logger.js';
 
@@ -38,7 +38,7 @@ export function parseWorkflowTOML(workflowName: string, basePath?: string): { co
 
   let raw: any;
   try {
-    raw = tomlParse(content);
+    raw = toml.parse(content);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return new ParseError('Failed to parse TOML', message);

@@ -44,7 +44,7 @@
     "@opencode-ai/sdk": "^1.4.5"
   },
   "dependencies": {
-    "smol-toml": "^1.6.1"
+    "toml": "^3.0.0"
   },
   "devDependencies": {
     "@types/node": "^25.9.1",

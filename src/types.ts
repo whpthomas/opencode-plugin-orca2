@@ -35,6 +35,9 @@ export enum State {
   // Next prompt
   NEXT,
 
+  // Send dialog prompt and wait for response
+  PENDING,
+
   // Paused for user input
   PAUSED,
 

@@ -306,7 +306,8 @@ export class WorkflowState {
       await this.resetContext();
     }
     if (step.dialog) {
-      this.state = State.PAUSED;
+      // Send first prompt while PENDING, then transition to PAUSED to wait for user input
+      this.state = this.state === State.PENDING ? State.PAUSED : State.PENDING;
     } else {
       this.state = State.NEXT;
     }
@@ -319,19 +320,16 @@ export class WorkflowState {
     this.stats?.endStep(step.name, this.tokens, retries, step.tasks.length);
     const workflow = this.workflow;
     this.currentStep++;
-    if (this.currentStep >= this.steps.length) {
+    const next = this.workflow.step(this.currentStep);
+    if (!next ||this.currentStep >= this.steps.length) {
       workflow.trace(`All steps done (index=${this.currentStep} >= length=${this.steps.length})`);
       this.currentStep = -1;
       this.state = State.DONE;
       return this.state;
     }
-    const next = this.step;
-    if(!next) {
-      this.state = State.ERROR;
-      return this.state;
-    }
     this.stats?.beginStep(next.name, this.tokens);
     workflow.trace(`Advancing to step '${next.name}'`);
+    this.state = State.NEXT;
     return await this.transition(next);
   }
 
@@ -351,7 +349,9 @@ export class WorkflowState {
     const variables = workflow.variables();
     const status = stepState.update(step, variables);
 
-    workflow.trace(`state=${State[this.state]} machine=${Machine[step.machine]} status=${Status[status]}`);
+    if (this.state !== State.PAUSED) {
+      workflow.trace(`state=${State[this.state]} machine=${Machine[step.machine]} status=${Status[status]}`);
+    }
 
     switch(step.machine) {
       case Machine.STEP:
