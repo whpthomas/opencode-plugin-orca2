@@ -183,6 +183,7 @@ export class Variables {
   }
 
   buildPrompt(workflow: string, step: string, prompt: string[], fullPrompt: boolean): string {
+    if(fullPrompt) log('INFO', `Building full prompt for workflow '${workflow}', step '${step}' with ${prompt.length} additional prompts...`);
     const parts: string[] = [];
 
     // Add workflow context (optional)

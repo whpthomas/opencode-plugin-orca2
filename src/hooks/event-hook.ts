@@ -108,8 +108,11 @@ async function waitForSubtask(client: any, sessionID: string, state: WorkflowSta
   if(subtaskMap.has(sessionID)) {
       const count = subtaskMap.get(sessionID)?.size || 0;
       workflow.info(`Spawned ${count} subtask(s)`);
+      const single = count == 1;
+      const set = 600000; // 10 minutes for single subtasks
+      const offset = 180000; // 3 minutes
       const delay = 60000; // 1 minute
-      let maxWait = count * delay; // subtask count x delay
+      let maxWait = single ? set : offset + (count * delay);
       let startTime = Date.now();
       // Watchdog loop to wait for subtasks to complete, with a timeout based on the number of subtasks
       while (Date.now() - startTime < maxWait) {
@@ -122,7 +125,7 @@ async function waitForSubtask(client: any, sessionID: string, state: WorkflowSta
           }
           if (epoc != state.epoc) {
               startTime = Date.now();
-              maxWait = count * delay;
+              maxWait = single ? set : offset + (count * delay);
               epoc = state.epoc;
           }
           parts.push(`${epoc} turns, ${state.tokens + state.subtaskTokens} tokens\n`)
@@ -164,7 +167,7 @@ async function waitForSubtask(client: any, sessionID: string, state: WorkflowSta
 
 async function spawnSubtask(client: any, sessionID: string, subtask: Subtask, state: WorkflowState) {
   const workflow = state.workflow;
-  workflow.trace(`Spawning ${state.stepName} ${subtask.name} for ${state.stepDescription}`);
+  workflow.trace(`Spawning ${subtask.name} for ${state.stepDescription}`);
   await client.tui.showToast({
       body: {
           title: `Spawn '${state.stepName}' subtask '${subtask.name}'`,
@@ -282,7 +285,7 @@ export async function event(input: any) {
     return;
   }
   const workflow = state.workflow;
-  //workflow.trace('Session idle event');
+  workflow.trace('Session idle event');
 
   let currentState = state.state;
   const count = workflow.retry * workflow.steps.length * 2;
@@ -295,11 +298,11 @@ export async function event(input: any) {
     }
     const resumed = state.resumed;
     currentState = await state.update();
+    const subtasks = state.build(resumed);
 
     switch(currentState) {
       case State.FIRST:
       case State.NEXT:
-        const subtasks = state.build(resumed);
         if(subtasks.length == 0) {
           workflow.info(`${State[currentState]} incomplete but no prompt`);
           return;
@@ -337,13 +340,15 @@ export async function event(input: any) {
         return;
       case State.ERROR:
         workflow.trace(`Workflow halted, removing ${sessionID}`);
-        await cleanupSubtask(client, sessionID);
-        loop = false;
+        if(await cleanupSubtask(client, sessionID)) {
+          loop = false;
+        }
         break;
       case State.DONE:
         workflow.info(`Workflow complete - no more prompts, removing ${sessionID}`);
-        await cleanupSubtask(client, sessionID);
-        loop = false;
+        if(await cleanupSubtask(client, sessionID)) {
+          loop = false;
+        }
     }
   }
   state.stats?.finalize(State[currentState]);

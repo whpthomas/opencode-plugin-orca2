@@ -257,7 +257,11 @@ export class WorkflowState {
     if (step.dialog) {
       // Send first prompt while PENDING, then transition to PAUSED to wait for user input
       this.state = this.state === State.NEXT ? State.PAUSED : State.NEXT;
+    } else if(step.subtask || step.parallel) {
+      // For subtask and parallel steps, transition to NEXT to send all prompts immediately
+      this.state = State.NEXT;
     } else {
+      // For non-dialog sequential steps, transition to CONTINUE to send "Please Continue" if session is idle
       this.state = this.state === State.NEXT ? State.CONTINUE : State.NEXT;
     }
     // Update cancel threshold
@@ -280,7 +284,8 @@ export class WorkflowState {
     workflow.trace(`Advancing to step '${next.name}'`);
     // Set state to CONTINUE to automatically transition
     // - dialog: NEXT -> PAUSED to wait for user input, then CONTINUE on next transition
-    // - non-dialog: NEXT -> CONTINUE to trigger "Please Continue" when session idle
+    // - subtask/parallel: NEXT -> NEXT to send next prompts immediately
+    // - sequential: NEXT -> CONTINUE to trigger "Please Continue" when session idle
     this.state = State.CONTINUE;
     return await this.transition(next);
   }
@@ -301,9 +306,7 @@ export class WorkflowState {
     const variables = workflow.variables();
     const status = stepState.update(step, variables);
 
-    if (this.state !== State.PAUSED) {
-      workflow.trace(`state=${State[this.state]} machine=${Machine[step.machine]} status=${Status[status]}`);
-    }
+    workflow.trace(`state=${State[this.state]} machine=${Machine[step.machine]} status=${Status[status]}`);
 
     switch(step.machine) {
       case Machine.STEP:

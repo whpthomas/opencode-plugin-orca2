@@ -7,6 +7,11 @@ import { Task, TaskState } from './task.js';
 import { Machine, Status } from './types.js';
 import { getFileType, generateEvalHTML, type Comparison } from './evaluate.js';
 import { generateProcessEval } from './evaluate-process.js';
+import {
+  compareTOMLFiles,
+  writeBenchmarkTOML,
+  writeBenchmarkHTML,
+} from './benchmark.js';
 
 export class Step {
   readonly name: string;
@@ -27,6 +32,7 @@ export class Step {
   readonly process: boolean;
   readonly concatenate?: string;
   readonly evaluate?: string;
+  readonly benchmark?: string;
 
   readonly machine: Machine;
   tasks: Task[] = [];
@@ -51,6 +57,7 @@ export class Step {
       process?: boolean;
       concatenate?: string;
       evaluate?: string;
+      benchmark?: string;
     } = {}
   ) {
     this.name = name;
@@ -71,6 +78,7 @@ export class Step {
     this.process = opts.process ?? false;;
     this.concatenate = opts.concatenate;
     this.evaluate = opts.evaluate;
+    this.benchmark = opts.benchmark;
     if (this.iterate) {
       this.machine = Machine.ITERATE;
     } else if (this.while) {
@@ -103,6 +111,7 @@ export class Step {
       process: config.process,
       concatenate: config.concatenate,
       evaluate: config.evaluate,
+      benchmark: config.benchmark,
     });
   }
 
@@ -321,6 +330,10 @@ export class Step {
       success = this.eval(variables) && success;
     }
 
+    if (this.benchmark) {
+      success = this.runBenchmark(variables) && success;
+    }
+
     return success;
   }
 
@@ -434,6 +447,60 @@ export class Step {
       return true;
     } catch (error) {
       log('WARN', `Failed to generate process evaluation HTML for step '${this.name}': ${error}`);
+      return false;
+    }
+  }
+
+  /**
+   * Run benchmark comparison: compare concatenated TOML against ground truth.
+   * Resolves benchmark path relative to project working directory.
+   * Writes benchmark.toml and benchmark.html to the job directory.
+   */
+  runBenchmark(variables: Variables): boolean {
+    try {
+      // Resolve the ground truth path relative to project working directory
+      const benchmarkPath = variables.resolve(this.benchmark!);
+
+      if (!benchmarkPath ) {
+        log('WARN', `Benchmark dataset path could not be resolved for '${this.name}' benchmark`);
+        return false;
+      }
+
+      if (!fs.existsSync(benchmarkPath)) {
+        log('WARN', `Benchmark dataset file not found: ${benchmarkPath}`);
+        return false;
+      }
+
+      // The concatenated output path (same as what cat() writes to)
+      const outputPath = variables.resolve(this.concatenate!);
+
+      if (!outputPath ) {
+        log('WARN', `Concatenated output path could not be resolved for '${this.name}' benchmark`);
+        return false;
+      }
+
+      if (!fs.existsSync(outputPath)) {
+        log('WARN', `Concatenated output not found: ${outputPath}`);
+        return false;
+      }
+
+      // Run comparison
+      const result = compareTOMLFiles(benchmarkPath, outputPath);
+
+      // Write TOML results
+      const tomlOutPath = path.join(variables.jobPath, 'benchmark.toml');
+      writeBenchmarkTOML(result, tomlOutPath);
+
+      // Write HTML report
+      const htmlOutPath = path.join(variables.jobPath, 'benchmark.html');
+      writeBenchmarkHTML(this.name, variables.jobName, result, htmlOutPath);
+
+      log('INFO', `Benchmark score: ${result.correctFields}/${result.totalFields} = ${result.score}%`);
+
+      return true;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      log('ERROR', `Benchmark failed: ${message}`);
       return false;
     }
   }

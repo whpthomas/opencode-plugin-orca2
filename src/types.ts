@@ -16,6 +16,7 @@ export interface TOMLStepConfig {
   process?: boolean;
   concatenate?: string;
   evaluate?: string;
+  benchmark?: string;
 }
 
 export interface TOMLWorkflowConfig {

@@ -274,7 +274,7 @@ Orchestrations are comprised of `toml` workflow files, and `markdown` step promp
 
 ### Context window Behavior
 
-By default, steps are inferenced sequentially within the main context window. A combination of the step prompt, subtask input, and prompts provide the full context for each step or subtask. As teh workflow progresses, only step prompts from subsequent steps and or input prompts from subsequent are included in the main context window.  However if the workflow resumes, the current step rebuilds the full prompt before it continues. Parallel and subtask modifiers spawn independent child sessions that each build full prompts.
+By default, steps are inferenced sequentially within the main context window. A combination of the step prompt, subtask input, and prompts provide the full context for each step or subtask. As the workflow progresses, only step prompts from subsequent steps and or input prompts from subsequent tasks are included in the main context window.  However if the workflow resumes, the current step rebuilds the full prompt before it continues. Parallel and subtask modifiers spawn independent child sessions that each build full prompts.
 
 ### Dialog Steps
 
@@ -324,8 +324,9 @@ See `workflow/rpi.toml` for a complete example of sequential and subtask steps w
 
 **Prerequisites:**
 
-1. Create a thoughts directory for you next feature request in `thoughts/NN-feature`.
-2. Write a prompt in `thoughts/NN-feature/prompt.md` outlining the work you want performed and and research references in the codebase the agent should read.
+1. Create a thoughts directory for you next feature request in `thoughts/NN-feature`
+2. Write a prompt in `thoughts/NN-feature/prompt.md` outlining your `# User Request`
+3. The agent will research the codebase, then ask you questions
 
 **Run the rpi workflow:**
 
@@ -339,22 +340,32 @@ See `workflow/ocr.toml` for a complete example of generate, iterate, and process
 
 **Prerequisites:**
 
-1. A multi-modal model like Qwen 3.x
-2. My [OpenCode tool pdf2img](https://www.npmjs.com/package/opencode-tool-pdf2img) installed
-3. Create a per-document directory for the document you want to analyze `task-N/`.
-4. Add additional steps with custom prompts for the data you wan to extract.
+1. A multi-modal model like Qwen 3.6
+2. Install my [OpenCode tool pdf2img](https://www.npmjs.com/package/opencode-tool-pdf2img)
+3. Create a per-document directory for the document you want to analyze `job-N/`.
+4. Create a process directory `process/process-1` containing a list of prompts for values you want extracted
 
 **Run the ocr workflow:**
 
 ```
-#{ocr task-N}
+#{ocr task-N process}
 ```
 
-### Questions Research Structure Plan Implement (qrspi) -- crispy
+### Questions Research Design-Alignment Plan Implement (qr-dpi)
 
-**Coming Soon:**
+See `workflow/qr-dpi.toml` for a task list and generate-validate loop pattern.
 
-See `workflow/qrspi.toml` for a task list and generate-validate loop pattern.
+**Prerequisites:**
+
+1. Create a thoughts directory for you next feature request in `thoughts/NN-feature`
+2. Write a prompt in `thoughts/NN-feature/prompt.md` outlining your `# User Request`
+3. The agent will ask you questions, research the codebase, then ask additional questions
+
+**Run the rpi workflow:**
+
+```
+#{qr-dpi NN-function}
+```
 
 ## Troubleshooting
 

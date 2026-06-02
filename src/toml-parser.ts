@@ -17,7 +17,7 @@ const VALID_STEP_KEYS = new Set([
   'name', 'description', 'prompt', 'input', 'output',
   'retry', 'dialog', 'subtask', 'parallel',
   'iterate', 'while', 'loop', 'process', 'concatenate',
-  'generate', 'HITL', 'evaluate'
+  'generate', 'HITL', 'evaluate', 'benchmark'
 ]);
 
 export function parseWorkflowTOML(workflowName: string, basePath?: string): { config: TOMLWorkflowConfig; filePath: string } | ParseError {
@@ -176,6 +176,13 @@ export function parseWorkflowTOML(workflowName: string, basePath?: string): { co
         return new ParseError(`Step '${rawStep.name}' invalid field`, 'evaluate must be a string');
       }
       step.evaluate = rawStep.evaluate;
+    }
+
+    if (rawStep.benchmark !== undefined) {
+      if (typeof rawStep.benchmark !== 'string') {
+        return new ParseError(`Step '${rawStep.name}' invalid field`, 'benchmark must be a string');
+      }
+      step.benchmark = rawStep.benchmark;
     }
 
     config.step.push(step);

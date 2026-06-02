@@ -6,7 +6,7 @@ debug = true
 name = "questions"
 description = "Ask questions and capture design brief"
 dialog = true
-prompt = "prompt.md"
+prompt = ["prompt.md"]
 output = "design-brief.md"
 
 [[step]]
