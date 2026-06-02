@@ -55,8 +55,18 @@ export async function chatMessage(input: any, _output: any) {
   if (!match) return;
 
   const workflowName = match[0];
-  const job = match[1];
-  const process = match[2];
+  let job = match[1];
+  let process = match[2];
+
+  // Strip incorrect prefixes (user may include these by mistake)
+  if (job?.startsWith('thoughts/')) {
+    job = job.substring(9);
+    log('WARN', `Stripped 'thoughts/' prefix from job argument`);
+  }
+  if (process?.startsWith('process/')) {
+    process = process.substring(8);
+    log('WARN', `Stripped 'process/' prefix from process argument`);
+  }
 
   if (!job) {
     log('ERROR', 'Workflow invocation missing job argument. Expected: #{workflow job [process]}');
