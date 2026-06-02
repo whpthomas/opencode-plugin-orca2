@@ -185,7 +185,7 @@ export function generateProcessEval(
   const tables = parseProcessTOML(tomlPath);
   const comparisons = groupByPage(tables, jobPath);
   
-  const html = generateProcessEvalHTML(stepName, jobName, comparisons, htmlPath);
+  const html = generateProcessEvalHTML(stepName, jobName, comparisons, htmlPath, tomlPath);
   
   // Write to file if htmlPath is provided
   if (htmlPath) {

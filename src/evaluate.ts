@@ -316,6 +316,28 @@ function escapeHtml(text: string | number | boolean | undefined | null): string 
 }
 
 /**
+ * Escape text for safe use in HTML attribute values.
+ */
+function escapeAttr(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+/**
+ * Convert any TOML value to a string for input attributes.
+ */
+function valueToString(value: unknown): string {
+  if (value === undefined || value === null) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'boolean' || typeof value === 'number') return String(value);
+  return JSON.stringify(value);
+}
+
+/**
  * Render TOML table data as HTML key-value pairs.
  * Handles both scalar and array-of-tables.
  * 
@@ -323,7 +345,8 @@ function escapeHtml(text: string | number | boolean | undefined | null): string 
  * @returns HTML string
  */
 export function renderProcessContent(table: ProcessTable): string {
-  let html = '<div class="table-entry mb-3">';
+  const dataIdx = table.arrayIndex ?? -1;
+  let html = `<div class="table-entry mb-3" data-table="${escapeAttr(table.tableId)}" data-array-index="${dataIdx}">`;
   
   // Table header with ID and array index if applicable
   html += `<h6 class="table-id">${escapeHtml(table.tableId)}`;
@@ -338,23 +361,30 @@ export function renderProcessContent(table: ProcessTable): string {
   for (const [key, value] of Object.entries(table.fields)) {
     html += '<dt class="col-sm-3 text-muted">' + escapeHtml(key) + '</dt>';
     html += '<dd class="col-sm-9">';
-    
-    if (value === undefined) {
-      html += '<em class="text-muted">undefined</em>';
-    } else if (typeof value === 'string') {
-      html += escapeHtml(value);
-    } else if (typeof value === 'boolean') {
-      html += escapeHtml(String(value));
-    } else if (typeof value === 'number') {
-      html += escapeHtml(String(value));
-    } else if (Array.isArray(value)) {
-      html += escapeHtml(JSON.stringify(value));
-    } else if (typeof value === 'object' && value !== null) {
-      html += escapeHtml(JSON.stringify(value));
+
+    if (typeof value === 'boolean') {
+      html += `<select class="form-select form-select-sm"
+                data-table="${escapeAttr(table.tableId)}"
+                data-index="${dataIdx}"
+                data-field="${escapeAttr(key)}">`;
+      html += `<option value="true"${value === true ? ' selected' : ''}>true</option>`;
+      html += `<option value="false"${value === false ? ' selected' : ''}>false</option>`;
+      html += '</select>';
+    } else if (typeof value === 'string' && value.length > 80) {
+      html += `<textarea class="form-control form-control-sm" rows="3"
+                data-table="${escapeAttr(table.tableId)}"
+                data-index="${dataIdx}"
+                data-field="${escapeAttr(key)}">${escapeHtml(value)}</textarea>`;
     } else {
-      html += escapeHtml(String(value));
+      const inputType = typeof value === 'number' ? 'number' : 'text';
+      const attrVal = escapeAttr(valueToString(value));
+      html += `<input type="${inputType}" class="form-control form-control-sm"
+                data-table="${escapeAttr(table.tableId)}"
+                data-index="${dataIdx}"
+                data-field="${escapeAttr(key)}"
+                value="${attrVal}">`;
     }
-    
+
     html += '</dd>';
   }
   
@@ -432,16 +462,25 @@ function renderPageGroup(comparison: ProcessComparison, index: number, htmlPath:
  * @param jobName - Job name for HTML title
  * @param comparisons - Array of ProcessComparison objects
  * @param htmlPath - Output path for the HTML file
+ * @param tomlPath - Original TOML file path for save metadata
  * @returns Generated HTML string
  */
 export function generateProcessEvalHTML(
   stepName: string,
   jobName: string,
   comparisons: ProcessComparison[],
-  htmlPath: string
+  htmlPath: string,
+  tomlPath?: string
 ): string {
   const title = `Process Evaluation: ${stepName} (${jobName})`;
   const totalItems = comparisons.length;
+  
+  // Build JSON data from all tables
+  const allTables: ProcessTable[] = [];
+  for (const c of comparisons) {
+    allTables.push(...c.tables);
+  }
+  const jsonData = JSON.stringify(allTables, null, 2);
   
   let itemsHTML = '';
   for (let i = 0; i < comparisons.length; i++) {
@@ -453,6 +492,7 @@ export function generateProcessEvalHTML(
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="toml-path" content="${escapeAttr(tomlPath || '')}">
   <title>${escapeHtml(title)}</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
@@ -508,6 +548,46 @@ export function generateProcessEvalHTML(
     .comparison-item {
       padding: 1rem 0;
     }
+    .table-entry .form-control,
+    .table-entry .form-select {
+      font-family: monospace;
+      font-size: 0.875rem;
+      background-color: #fffde7;
+      border: 1px solid #e0e0e0;
+    }
+    .table-entry .form-control:focus,
+    .table-entry .form-select:focus {
+      background-color: #fff;
+      border-color: #86b7fe;
+      box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.15);
+    }
+    .table-entry textarea.form-control {
+      resize: vertical;
+      min-height: 60px;
+    }
+    #saveBtn:disabled {
+      opacity: 0.5;
+    }
+    #statusMsg {
+      transition: opacity 0.3s;
+    }
+    .form-control.is-dirty,
+    .form-select.is-dirty {
+      background-color: #fff3cd !important;
+      border-color: #ffc107 !important;
+    }
+    .form-control.is-dirty:focus,
+    .form-select.is-dirty:focus {
+      background-color: #fff !important;
+      border-color: #ffc107 !important;
+      box-shadow: 0 0 0 0.2rem rgba(255, 193, 7, 0.25) !important;
+    }
+    .form-control.is-saved,
+    .form-select.is-saved {
+      transition: background-color 0.5s;
+      background-color: #d4edda !important;
+      border-color: #28a745 !important;
+    }
   </style>
 </head>
 <body>
@@ -520,9 +600,19 @@ export function generateProcessEvalHTML(
             ← Previous
           </button>
           <span id="counter" class="me-2">1 / ${totalItems}</span>
-          <button class="btn btn-outline-primary btn-sm" id="nextBtn" ${totalItems <= 1 ? 'disabled' : ''}>
+          <span id="dirtyBadge" class="badge bg-warning text-dark me-2" style="display: none;">
+            Unsaved changes
+          </span>
+          <button class="btn btn-outline-primary btn-sm me-3" id="nextBtn" ${totalItems <= 1 ? 'disabled' : ''}>
             Next →
           </button>
+          <button class="btn btn-success btn-sm" id="saveBtn" disabled>
+            Save
+          </button>
+          <button class="btn btn-outline-secondary btn-sm me-2" id="revertBtn" style="display: none;">
+            Revert
+          </button>
+          <span id="statusMsg" class="ms-2 text-success" style="display:none; font-size: 0.85rem;"></span>
         </div>
       </div>
     </div>
@@ -532,15 +622,19 @@ export function generateProcessEvalHTML(
     ${itemsHTML}
   </div>
   
+  <script id="toml-data" type="application/json">
+    ${jsonData}
+  </script>
   <script>
     (function() {
+      // ===== NAVIGATION =====
       var currentIndex = 0;
       var totalItems = ${totalItems};
       var items = document.querySelectorAll('.comparison-item');
       var prevBtn = document.getElementById('prevBtn');
       var nextBtn = document.getElementById('nextBtn');
       var counter = document.getElementById('counter');
-      
+
       function showItem(index) {
         items.forEach(function(item, i) {
           item.style.display = i === index ? 'block' : 'none';
@@ -550,29 +644,288 @@ export function generateProcessEvalHTML(
         nextBtn.disabled = index === totalItems - 1;
         currentIndex = index;
       }
-      
+
       prevBtn.addEventListener('click', function() {
-        if (currentIndex > 0) {
-          showItem(currentIndex - 1);
-        }
+        if (currentIndex > 0) showItem(currentIndex - 1);
       });
-      
       nextBtn.addEventListener('click', function() {
-        if (currentIndex < totalItems - 1) {
-          showItem(currentIndex + 1);
-        }
+        if (currentIndex < totalItems - 1) showItem(currentIndex + 1);
       });
-      
       document.addEventListener('keydown', function(e) {
-        if (e.key === 'ArrowLeft' && currentIndex > 0) {
-          showItem(currentIndex - 1);
-        } else if (e.key === 'ArrowRight' && currentIndex < totalItems - 1) {
-          showItem(currentIndex + 1);
+        if (e.key === 'ArrowLeft' && currentIndex > 0) showItem(currentIndex - 1);
+        else if (e.key === 'ArrowRight' && currentIndex < totalItems - 1) showItem(currentIndex + 1);
+        else if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+          e.preventDefault();
+          document.getElementById('saveBtn').click();
         }
       });
-      
-      // Initialize
+
+      // ===== DATA MODEL =====
+      var tomlData = JSON.parse(document.getElementById('toml-data').textContent);
+      var tomlPath = document.querySelector('meta[name="toml-path"]').content;
+      var saveBtn = document.getElementById('saveBtn');
+      var revertBtn = document.getElementById('revertBtn');
+      var dirtyBadge = document.getElementById('dirtyBadge');
+      var statusMsg = document.getElementById('statusMsg');
+      var fileHandle = null;
+
+      // ===== TOML SERIALIZER =====
+      function escapeTomlString(s) {
+        return s.replace(/\\\\/g, '\\\\\\\\').replace(/"/g, '\\\\"');
+      }
+
+      function serializeTable(table) {
+        var lines = [];
+        var header = table.arrayIndex !== null
+          ? '[[' + table.tableId + ']]'
+          : '[' + table.tableId + ']';
+        lines.push(header);
+
+        var keys = Object.keys(table.fields);
+        for (var k = 0; k < keys.length; k++) {
+          var key = keys[k];
+          var val = table.fields[key];
+
+          if (val === undefined || val === 'undefined' || val === null) {
+            lines.push(key + ' = undefined');
+          } else if (typeof val === 'boolean') {
+            lines.push(key + ' = ' + val);
+          } else if (typeof val === 'number') {
+            lines.push(key + ' = ' + val);
+          } else if (typeof val === 'string') {
+            lines.push(key + ' = "' + escapeTomlString(val) + '"');
+          } else {
+            lines.push(key + ' = ' + JSON.stringify(val));
+          }
+        }
+        return lines.join('\\n');
+      }
+
+      function serializeAll() {
+        var groups = {};
+        var order = [];
+        for (var i = 0; i < tomlData.length; i++) {
+          var t = tomlData[i];
+          if (!groups[t.tableId]) {
+            groups[t.tableId] = [];
+            order.push(t.tableId);
+          }
+          groups[t.tableId].push(t);
+        }
+
+        var parts = [];
+        for (var j = 0; j < order.length; j++) {
+          var id = order[j];
+          var tables = groups[id];
+          for (var m = 0; m < tables.length; m++) {
+            parts.push(serializeTable(tables[m]));
+          }
+        }
+        return parts.join('\\n\\n') + '\\n';
+      }
+
+      // ===== COLLECT EDITS FROM DOM =====
+      function collectEdits() {
+        var inputs = document.querySelectorAll('[data-table][data-field]');
+        for (var i = 0; i < inputs.length; i++) {
+          var el = inputs[i];
+          var tableId = el.getAttribute('data-table');
+          var field = el.getAttribute('data-field');
+          var indexStr = el.getAttribute('data-index');
+          var index = parseInt(indexStr, 10);
+
+          var table = null;
+          var matchCount = 0;
+          for (var j = 0; j < tomlData.length; j++) {
+            if (tomlData[j].tableId === tableId) {
+              if (matchCount === index || (index === -1 && matchCount === 0)) {
+                table = tomlData[j];
+                break;
+              }
+              matchCount++;
+            }
+          }
+
+          if (table) {
+            var newVal = el.tagName === 'SELECT' ? el.value
+              : el.type === 'number' ? (el.value === '' ? undefined : Number(el.value))
+              : el.value || undefined;
+            table.fields[field] = newVal;
+          }
+        }
+      }
+
+      // ===== DIRTY TRACKING =====
+      var dirtyInputs = new Set();
+      var isDirty = false;
+      var savedValues = {};
+
+      function snapshotOriginals() {
+        var inputs = document.querySelectorAll('[data-table][data-field]');
+        for (var i = 0; i < inputs.length; i++) {
+          var el = inputs[i];
+          var key = el.getAttribute('data-table') + '|' +
+                    el.getAttribute('data-index') + '|' +
+                    el.getAttribute('data-field');
+          savedValues[key] = el.value;
+        }
+      }
+
+      function markDirty(el) {
+        var key = el.getAttribute('data-table') + '|' +
+                  el.getAttribute('data-index') + '|' +
+                  el.getAttribute('data-field');
+        var original = savedValues[key];
+        var current = el.value;
+
+        if (current !== original) {
+          el.classList.add('is-dirty');
+          dirtyInputs.add(key);
+        } else {
+          el.classList.remove('is-dirty');
+          dirtyInputs.delete(key);
+        }
+        updateDirtyState();
+      }
+
+      function updateDirtyState() {
+        isDirty = dirtyInputs.size > 0;
+        saveBtn.disabled = !isDirty;
+        dirtyBadge.style.display = isDirty ? 'inline' : 'none';
+        revertBtn.style.display = isDirty ? 'inline-block' : 'none';
+      }
+
+      function attachDirtyListeners() {
+        var inputs = document.querySelectorAll('[data-table][data-field]');
+        for (var i = 0; i < inputs.length; i++) {
+          var el = inputs[i];
+          el.addEventListener('input', function() { markDirty(this); });
+          el.addEventListener('change', function() { markDirty(this); });
+        }
+      }
+
+      // ===== REVERT =====
+      revertBtn.addEventListener('click', function() {
+        var inputs = document.querySelectorAll('[data-table][data-field]');
+        for (var i = 0; i < inputs.length; i++) {
+          var el = inputs[i];
+          var key = el.getAttribute('data-table') + '|' +
+                    el.getAttribute('data-index') + '|' +
+                    el.getAttribute('data-field');
+          el.value = savedValues[key] || '';
+          el.classList.remove('is-dirty');
+        }
+        dirtyInputs.clear();
+        updateDirtyState();
+      });
+
+      // ===== BEFORE UNLOAD WARNING =====
+      window.addEventListener('beforeunload', function(e) {
+        if (isDirty) {
+          e.preventDefault();
+          e.returnValue = '';
+        }
+      });
+
+      // ===== SAVE LOGIC =====
+      function getFilename() {
+        if (tomlPath) {
+          var parts = tomlPath.replace(/\\\\/g, '/').split('/');
+          return parts[parts.length - 1] || 'output.toml';
+        }
+        return 'corrected.toml';
+      }
+
+      async function saveToFileSystem(content) {
+        try {
+          if (!fileHandle) {
+            var opts = {
+              types: [{
+                description: 'TOML files',
+                accept: { 'text/toml': ['.toml'] }
+              }],
+              multiple: false
+            };
+            var filename = getFilename();
+            if (filename) {
+              opts.suggestedName = filename;
+            }
+            var handles = await window.showOpenFilePicker(opts);
+            fileHandle = handles[0];
+          }
+          var writable = await fileHandle.createWritable();
+          await writable.write(content);
+          await writable.close();
+          showStatus('Saved to ' + getFilename(), 'success');
+        } catch (e) {
+          if (e.name === 'AbortError') {
+            return;
+          }
+          downloadFile(content);
+          showStatus('Downloaded (save failed: ' + e.message + ')', 'warning');
+        }
+      }
+
+      function downloadFile(content) {
+        var blob = new Blob([content], { type: 'text/toml' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = getFilename();
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        showStatus('Downloaded ' + getFilename(), 'success');
+      }
+
+      function showStatus(msg, type) {
+        statusMsg.textContent = msg;
+        statusMsg.className = 'ms-2 text-' + (type || 'success');
+        statusMsg.style.display = 'inline';
+        clearTimeout(showStatus._timer);
+        showStatus._timer = setTimeout(function() {
+          statusMsg.style.display = 'none';
+        }, 3000);
+      }
+
+      // ===== SAVE BUTTON HANDLER =====
+      saveBtn.addEventListener('click', function() {
+        collectEdits();
+        var content = serializeAll();
+
+        var savePromise;
+        if ('showOpenFilePicker' in window) {
+          savePromise = saveToFileSystem(content);
+        } else {
+          downloadFile(content);
+          savePromise = Promise.resolve();
+        }
+
+        savePromise.then(function() {
+          var dirtyEls = document.querySelectorAll('.is-dirty');
+          for (var i = 0; i < dirtyEls.length; i++) {
+            dirtyEls[i].classList.remove('is-dirty');
+            dirtyEls[i].classList.add('is-saved');
+          }
+          dirtyInputs.clear();
+          updateDirtyState();
+
+          snapshotOriginals();
+
+          setTimeout(function() {
+            var saved = document.querySelectorAll('.is-saved');
+            for (var j = 0; j < saved.length; j++) {
+              saved[j].classList.remove('is-saved');
+            }
+          }, 1500);
+        });
+      });
+
+      // ===== INITIALIZE =====
       showItem(0);
+      snapshotOriginals();
+      attachDirtyListeners();
     })();
   </script>
 </body>
