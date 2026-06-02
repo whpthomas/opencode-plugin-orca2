@@ -7,7 +7,6 @@ stats = true
 [[step]]
 name = "pdf2img"
 description = "Convert pdf to png page images"
-sequential = true
 generate = true
 output = "$EACH.png"
 

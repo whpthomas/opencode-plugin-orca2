@@ -501,6 +501,8 @@ export function generateProcessEvalHTML(
     }
     .content-box {
       min-height: 200px;
+      max-height: 80vh;
+      overflow-y: auto;
       background: #fff;
       font-size: 0.925rem;
       line-height: 1.65;
@@ -652,6 +654,9 @@ export function generateProcessEvalHTML(
         if (currentIndex < totalItems - 1) showItem(currentIndex + 1);
       });
       document.addEventListener('keydown', function(e) {
+        var tag = document.activeElement.tagName;
+        var isFormField = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+        if (isFormField) return;
         if (e.key === 'ArrowLeft' && currentIndex > 0) showItem(currentIndex - 1);
         else if (e.key === 'ArrowRight' && currentIndex < totalItems - 1) showItem(currentIndex + 1);
         else if ((e.ctrlKey || e.metaKey) && e.key === 's') {
@@ -850,8 +855,12 @@ export function generateProcessEvalHTML(
             if (filename) {
               opts.suggestedName = filename;
             }
-            var handles = await window.showOpenFilePicker(opts);
-            fileHandle = handles[0];
+            if ('showSaveFilePicker' in window) {
+              fileHandle = await window.showSaveFilePicker(opts);
+            } else {
+              var handles = await window.showOpenFilePicker(opts);
+              fileHandle = handles[0];
+            }
           }
           var writable = await fileHandle.createWritable();
           await writable.write(content);
@@ -895,7 +904,7 @@ export function generateProcessEvalHTML(
         var content = serializeAll();
 
         var savePromise;
-        if ('showOpenFilePicker' in window) {
+        if ('showSaveFilePicker' in window || 'showOpenFilePicker' in window) {
           savePromise = saveToFileSystem(content);
         } else {
           downloadFile(content);

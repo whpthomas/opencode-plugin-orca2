@@ -7,7 +7,7 @@ export interface TOMLStepConfig {
   generate?: boolean;
   retry?: number;
   dialog?: boolean;
-  sequential?: boolean;
+  subtask?: boolean;
   parallel?: boolean;
   HITL?: boolean;
   iterate?: string;
@@ -28,13 +28,14 @@ export interface TOMLWorkflowConfig {
 }
 
 export type NumberSetter = (index: number) => void;
+export type NumberIncrementer = (increment: boolean) => number;
 
 export enum State {
   // First prompt
   FIRST,
 
   // Send prompt and wait for response
-  PENDING,
+  CONTINUE,
 
   // Next prompt
   NEXT,

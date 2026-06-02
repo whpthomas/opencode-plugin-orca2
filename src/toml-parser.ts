@@ -15,7 +15,7 @@ export class ParseError {
 
 const VALID_STEP_KEYS = new Set([
   'name', 'description', 'prompt', 'input', 'output',
-  'retry', 'dialog', 'sequential', 'parallel',
+  'retry', 'dialog', 'subtask', 'parallel',
   'iterate', 'while', 'loop', 'process', 'concatenate',
   'generate', 'HITL', 'evaluate'
 ]);
@@ -137,7 +137,7 @@ export function parseWorkflowTOML(workflowName: string, basePath?: string): { co
     }
 
     if (rawStep.dialog !== undefined) step.dialog = Boolean(rawStep.dialog);
-    if (rawStep.sequential !== undefined) step.sequential = Boolean(rawStep.sequential);
+    if (rawStep.subtask !== undefined) step.subtask = Boolean(rawStep.subtask);
     if (rawStep.parallel !== undefined) step.parallel = Boolean(rawStep.parallel);
     if (rawStep.HITL !== undefined) step.HITL = Boolean(rawStep.HITL);
 

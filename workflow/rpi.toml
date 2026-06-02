@@ -11,7 +11,6 @@ output = "research.md"
 [[step]]
 name = "design"
 description = "Design alignment"
-sequential = true
 dialog = true
 prompt = ["prompt.md", "research.md"]
 output = "design.md"
@@ -19,14 +18,15 @@ output = "design.md"
 [[step]]
 name = "plan"
 description = "Create technical plan"
-sequential = true
 generate = true
+subtask = true
 prompt = ["prompt.md","research.md", "design.md"]
 output = "$EACH.md"
 
 [[step]]
 name = "implement"
 description = "Implement technical plan $INDEX"
+subtask = true
 iterate = "plan"
 input = "plan/$EACH.md"
 prompt = ["research.md", "design.md"]

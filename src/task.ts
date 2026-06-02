@@ -21,6 +21,13 @@ export class TaskState {
         this.retry = 0;
     }
 
+    retryCounter(increment: boolean): number {
+        if (increment) {
+            this.retry++;
+        }
+        return this.retry;
+    }
+
     update(retryMax: number, taskOutput: string): Status {
         if (fs.existsSync(taskOutput)) {
             this.retry = 0;

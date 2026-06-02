@@ -19,7 +19,7 @@ export class Step {
   readonly retry: number;
   readonly dialog: boolean;
   readonly HITL: boolean;
-  readonly sequential: boolean;
+  readonly subtask: boolean;
   readonly parallel: boolean;
   readonly iterate?: string;
   readonly while?: string;
@@ -43,7 +43,7 @@ export class Step {
       retry?: number;
       dialog?: boolean;
       HITL?: boolean;
-      sequential?: boolean;
+      subtask?: boolean;
       parallel?: boolean;
       iterate?: string;
       while?: string;
@@ -63,7 +63,7 @@ export class Step {
     this.retry = opts.retry ?? 3;
     this.dialog = opts.dialog ?? false;
     this.HITL = opts.HITL ?? false;
-    this.sequential = opts.sequential ?? false;
+    this.subtask = opts.subtask ?? false;
     this.parallel = opts.parallel ?? false;
     this.iterate = opts.iterate;
     this.while = opts.while;
@@ -95,7 +95,7 @@ export class Step {
       retry: config.retry ?? defaultRetry,
       dialog: config.dialog,
       HITL: config.HITL,
-      sequential: config.sequential,
+      subtask: config.subtask,
       parallel: config.parallel,
       iterate: config.iterate,
       while: config.while,
@@ -209,7 +209,7 @@ export class Step {
 
     // For simple steps without $EACH, check if output exists
     if (this.machine === Machine.STEP) {
-      const prompt = variables.buildPrompt(workflow, this.name, this.prompt, !this.sequential || firstPrompt);
+      const prompt = variables.buildPrompt(workflow, this.name, this.prompt, !this.subtask || firstPrompt);
       if (prompt.trim()) {
         return prompt;
       }
@@ -218,7 +218,7 @@ export class Step {
     }
 
     if (this.machine === Machine.GENERATE) {
-      const prompt = variables.buildPrompt(workflow, this.name, this.prompt, !this.sequential || firstPrompt);
+      const prompt = variables.buildPrompt(workflow, this.name, this.prompt, !this.subtask || firstPrompt);
       if (prompt.trim()) {
         return prompt;
       }
@@ -445,6 +445,13 @@ export class StepState {
   tasks: TaskState[] = [];
   status: Status = Status.PENDING;
   output: string | null = null;
+
+  retryCounter(increment: boolean): number {
+      if (increment) {
+          this.retry++;
+      }
+      return this.retry;
+  }
 
   taskStatus(task: number): Status {
     if (task < 0 || task >= this.tasks.length) {

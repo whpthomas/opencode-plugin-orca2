@@ -46,11 +46,13 @@ States (Status enum): PENDING → RETRY → SUBTASK_COMPLETE → STEP_DONE / HAL
 
 Machine × Modifier behavior:
   Step:            RETRY→continue, STEP_DONE→next step, HALT→halt
-  Step+sequential: same but keeps context window
+  Step+subtask:    RETRY→spawn subtask
   Step+dialog:     pauses on RETRY, waits for user
   Iterate:         RETRY→next subtask, STEP_DONE→next step, HALT→skip if !HITL
-  Iterate+parallel: RETRY→re-spawn subtask
+  Iterate+subtask: RETRY→spawn one subtask at a time
+  Iterate+parallel: RETRY→spawn all subtasks
   While:           RETRY→continue, SUBTASK_COMPLETE→next step or loop
+  While+subtask:   RETRY→spawn subtask
   While+loop:      SUBTASK_COMPLETE→jump to loop target step
   Process:         same as Iterate (but reads from `process/<process>/`)
 ```
@@ -99,20 +101,21 @@ name, description         — required
 prompt (string|string[])  — optional
 input (string)            — optional
 output (string)           — optional
-sequential                — keeps context window (no checkpoint rollback)
-parallel                  — spawn child sessions
+subtask                   — spawn one child subtask at a time
+parallel                  — spawn all child subtasks
 dialog                    — pause for user input, wait for output file
+generate (boolean)        — this step generates files
 iterate (string)          — iterate files in subdirectory relative to job
 while (string)            — iterate files across multiple steps
 loop (string)             — jump to named step on subtask complete
 process (boolean)         — read from process/<process>/ directory
 concatenate (string)      — single output path (template = this.output)
-generate (boolean)        — this step generates files
+evaluate (string)         — single output path (input = concatenate.output)
 retry (number)            — per-step retry override
 HITL (boolean)            — halt instead of skip on exhausted retries
 ```
 
-**Gotcha**: `concatenate` is a single string (concatenated output path). The template pattern is `this.output` — `$EACH.md` → reads `<step-dir>/*.md`, concatenates sorted to `<concatenate-path>`. Tests incorrectly expect `string[2]` array `[template, output]`.
+**Gotcha**: `concatenate` is a single string (concatenated output path). The template pattern is `this.output` — `$EACH.md` → reads `<step-dir>/*.md`, concatenates sorted to `<concatenate-path>`.
 
 ## Cancellation Detection
 
@@ -120,9 +123,9 @@ If `nextPrompt()` is called within **3 seconds** of the last retry, the workflow
 
 ## Context Management
 
-- Default: `resetContext()` clears all messages (deletes up to checkpoint), then `storeCheckpoint()` saves the first message ID for next reset boundary
-- `sequential` steps skip the reset, keeping the context window
-- On resume: sequential steps still load their input files to rebuild prompt
+- Default: steps and tasks are inferenced sequentially within the main context window. Only step prompts from subsequent steps and or input prompts from subsequent are included.
+- On resume: the current step rebuilds the full prompt and continue
+- Parallel and subtask modifiers: spawn independent child sessions that build full prompts.
 
 ## Testing Conventions
 

@@ -12,7 +12,6 @@ output = "review.md"
 [[step]]
 name = "revise"
 description = "Plan revisions based on the review"
-sequential = true
 generate = true
 prompt = ["review.md", "design-brief.md", "research.md", "design.md"]
 output = "$EACH.md"
@@ -20,6 +19,7 @@ output = "$EACH.md"
 [[step]]
 name = "implement"
 description = "Implement revision $INDEX"
+subtask = true
 iterate = "revise"
 input = "revise/$EACH.md"
 prompt = ["review.md", "research.md", "design.md"]

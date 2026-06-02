@@ -293,14 +293,14 @@ The workflow implies a `workflow/<workflow>.md` system prompt, which if it exist
 
 ### Step Definition Syntax
 
-Each step implies a `workflow/<workflow>/<step>.md` prompt included as the first user prompt. For non-sequential steps, prompts in the `input` list (if they exist) are appended to the user prompt, and in the case of sequential steps, only when this is the first step after the workflow resumed.
+Each step implies a `workflow/<workflow>/<step>.md` prompt included as the first user prompt. Steps prompts in the `input` list (if they exist) are only appended to the user prompt when this is the first step after the workflow is resumed. Parallel and subtask modifiers spawn independent child sessions that use the `input` list to build their prompts.
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `name` | string | Yes | Unique step identifier |
 | `description` | string | Yes | Human-readable step description |
-| `sequential` | boolean | No | Continue using the context window (default: false) |
-| `parallel` | boolean | No | Spawn parallel sub-tasks (default: false) |
+| `subtask` | boolean | No | Spawn subtask  (default: false) |
+| `parallel` | boolean | No | Spawn parallel subtasks (default: false) |
 | `process` | boolean | No | Run custom process configuration (default: false) |
 | `dialog` | boolean | No | Pauses workflow with open-ended chat until output created |
 | `retry` | number | No | Max retries for this step (overrides default retry) |
@@ -316,7 +316,7 @@ Each step implies a `workflow/<workflow>/<step>.md` prompt included as the first
 
 ## State Machine
 
-Steps have five state machine types, `step`, `generate`, `iterate`, `while` and `process`. There are also four modifiers, `sequential`, `dialog`, `parallel` and `loop`, which only work with specific state machine types.
+Steps have five state machine types, `step`, `generate`, `iterate`, `while` and `process`. There are also four modifiers, `dialog`, `subtask`, `parallel` and `loop`, which only work with specific state machine types.
 
 Steps return one of four status responses:
 
@@ -333,21 +333,24 @@ Steps return one of four status responses:
 
 | Machine | Modifier   | Context | RETRY    | SUBTASK_DONE | STEP_DONE | HALT  |
 |---------|------------|---------|----------|--------------|-----------|-------|
-| Step    |            | reset   | continue |              | Next step | yes   |
-| Step    |`sequential`| keep    | continue |              | Next step | yes   |
-| Step    | `dialog`   |         |          |              | Next step | pause |
-| Generate|            | reset   | continue |              | Next step | yes   |
-| Generate|`sequential`| keep    | continue |              | Next step | yes   |
-| Iterate |            | reset   | continue | Next Subtask | Next step | HITL? |
-| Iterate | `parallel` |         | re-spawn |              | Next step | HITL? |
-| While   |            | reset   | continue | Next step    | Next step | yes   |
-| While   | `loop`     | reset   | continue | Loop step    | Next step | yes   |
-| Process |            | reset   | continue | Next Subtask | Next step | HITL? |
-| Process | `parallel` |         | re-spawn |              | Next step | HITL? |
+| Step    |            | parent  | continue |              | Next step | yes   |
+| Step    | `subtask`  | child   | continue |              | Next step | HITL? |
+| Step    | `dialog`   | parent  |          |              | Next step | pause |
+| Generate|            | parent  | continue |              | Next step | yes   |
+| Generate| `subtask`  | child   | continue |              | Next step | HITL? |
+| Iterate |            | parent  | continue | Next Subtask | Next step | yes   |
+| Iterate | `subtask`  | child   | continue | Next Subtask | Next step | HITL? |
+| Iterate | `parallel` | child   | re-spawn |              | Next step | HITL? |
+| While   |            | parent  | continue | Next step    | Next step | yes   |
+| While   | `subtask`  | child   | continue | Next step    | Next step | HITL? |
+| While   | `loop`     | -       | -        | Loop step    | -         | -     |
+| Process |            | parent  | continue | Next Subtask | Next step | yes   |
+| Process | `subtask`  | child   | continue | Next Subtask | Next step | HITL? |
+| Process | `parallel` | child   | re-spawn |              | Next step | HITL? |
 
 ### Context window Behavior
 
-By default, the context window is reset with each step or subtask. The combination of step prompt, subtask input, and `input` prompts provide the full context for each step or subtask. The `sequential` field causes steps not to reset the context, and instead continue using the existing context window (no `storeCheckpoint()` or `rollbackToCheckpoint()`). However if the workflow resumes, the sequential step must also provide the necessary `input` files to rebuild the prompt. Sequential steps are only compatible with regular steps (no iterate, while, process, parallel, or generate modifiers).
+By default, steps are inferenced sequentially within the main context window. A combination of the step prompt, subtask input, and prompts provide the full context for each step or subtask. As teh workflow progresses, only step prompts from subsequent steps and or input prompts from subsequent are included in the main context window.  However if the workflow resumes, the current step rebuilds the full prompt before it continues. Parallel and subtask modifiers spawn independent child sessions that each build full prompts.
 
 ### Dialog Steps
 

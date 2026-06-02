@@ -185,25 +185,25 @@ export class WorkflowState {
   get resumed() : boolean {
     // First steps are always resumed
     if (this.state === State.FIRST) return true;
-    // Sequential steps are not resumed
+    // Subtask and Parallel steps always require full prompts
     const step = this.step;
-    if(step) return step.sequential ? false : true;
-    // All other steps are assumed to have a fresh context
-    return true;
+    if(step && (step.subtask || step.parallel)) return true;
+    // All other steps are assumed to be sequential
+    return false;
   }
 
   get cancelled(): boolean {
     return this.state == State.CANCELLED;
   }
 
+  get subtask(): boolean {
+    const step = this.step;
+    return step ? step.subtask : false;
+  }
+
   get parallel(): boolean {
     const step = this.step;
     return step ? step.parallel : false;
-  }
-
-  get sequential(): boolean {
-    const step = this.step;
-    return step ? step.sequential : false;
   }
 
   get epoc(): number {
@@ -256,9 +256,9 @@ export class WorkflowState {
     }
     if (step.dialog) {
       // Send first prompt while PENDING, then transition to PAUSED to wait for user input
-      this.state = this.state === State.PENDING ? State.PAUSED : State.PENDING;
+      this.state = this.state === State.NEXT ? State.PAUSED : State.NEXT;
     } else {
-      this.state = State.NEXT;
+      this.state = this.state === State.NEXT ? State.CONTINUE : State.NEXT;
     }
     // Update cancel threshold
     this.lastRetryTimestamp = Date.now();
@@ -278,7 +278,10 @@ export class WorkflowState {
     }
     this.stats?.beginStep(next.name, this.tokens);
     workflow.trace(`Advancing to step '${next.name}'`);
-    this.state = State.NEXT;
+    // Set state to CONTINUE to automatically transition
+    // - dialog: NEXT -> PAUSED to wait for user input, then CONTINUE on next transition
+    // - non-dialog: NEXT -> CONTINUE to trigger "Please Continue" when session idle
+    this.state = State.CONTINUE;
     return await this.transition(next);
   }
 
@@ -405,7 +408,7 @@ export class WorkflowState {
     } else if(machine === Machine.STEP || machine === Machine.GENERATE) {
       const prompt = workflow.nextPrompt(this.currentStep, 0, resumed);
       if(prompt?.trim()) {
-        const subtask = new Subtask(step.name, 0, prompt, stepState.output, stepState.retry);
+        const subtask = new Subtask(step.name, 0, prompt, stepState.output, (increment: boolean) => stepState.retryCounter(increment));
         subtasks.push(subtask);
       } else if (machine === Machine.STEP) {
         log('WARN', `Step '${step?.name}' prompt is empty`);
@@ -433,7 +436,7 @@ export class WorkflowState {
         }
         const prompt = workflow.nextPrompt(this.currentStep, currentTask, resumed);
         if(prompt?.trim()) {
-          const subtask = new Subtask(task.each, task.index, prompt,  task.output, taskState.retry);
+          const subtask = new Subtask(task.each, task.index, prompt,  task.output, (increment: boolean) => taskState.retryCounter(increment));
           subtasks.push(subtask);
         } else if(machine === Machine.PROCESS) {
             log('WARN', `Step '${step.name}' process '${task.each}' prompt is empty`);

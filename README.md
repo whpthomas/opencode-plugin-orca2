@@ -257,8 +257,8 @@ Orchestrations are comprised of `toml` workflow files, and `markdown` step promp
 |-------|------|----------|-------------|
 | `name` | string | Yes | Unique step identifier |
 | `description` | string | Yes | Human-readable step description |
-| `sequential` | boolean | No | Continue using the context window (default: false) |
-| `parallel` | boolean | No | Spawn parallel sub-tasks (default: false) |
+| `subtask` | boolean | No | Spawn subtask (default: false) |
+| `parallel` | boolean | No | Spawn parallel subtasks (default: false) |
 | `process` | boolean | No | Run custom process configuration (default: false) |
 | `dialog` | boolean | No | Pauses workflow with open-ended chat until output created |
 | `retry` | number | No | Max retries for this step (overrides default retry) |
@@ -274,7 +274,7 @@ Orchestrations are comprised of `toml` workflow files, and `markdown` step promp
 
 ### Context window Behavior
 
-By default, the context window is reset with each new step or parallel sub-task. The `prompt` files provide the full context for each step. The `sequential` field causes a step to continue using the context window (no `storeCheckpoint()` or `rollbackToCheckpoint()`). However it must also provide prompt files to rebuild the prompt if the workflow resumes with the sequential step. Sequential steps are incompatible with `iterate` and `while` steps.
+By default, steps are inferenced sequentially within the main context window. A combination of the step prompt, subtask input, and prompts provide the full context for each step or subtask. As teh workflow progresses, only step prompts from subsequent steps and or input prompts from subsequent are included in the main context window.  However if the workflow resumes, the current step rebuilds the full prompt before it continues. Parallel and subtask modifiers spawn independent child sessions that each build full prompts.
 
 ### Dialog Steps
 
@@ -320,7 +320,7 @@ Copy workflow directory into you project.
 
 ### Research Plan Implement (rpi)
 
-See `workflow/rpi.toml` for a complete example of sequential and parallel steps with iteration.
+See `workflow/rpi.toml` for a complete example of sequential and subtask steps with iteration.
 
 **Prerequisites:**
 

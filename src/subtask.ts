@@ -1,3 +1,5 @@
+import { NumberIncrementer } from "./types";
+
 export class Subtask {
   parentID: string;
   name: string;
@@ -8,9 +10,9 @@ export class Subtask {
   epoc: number;
   turns: number;
   tokens: number;
-  retry: number;
+  retryCounter: NumberIncrementer;
 
-  constructor(name: string, index: number, prompt: string, output: string | null, retry: number) {
+  constructor(name: string, index: number, prompt: string, output: string | null, retryCounter: NumberIncrementer) {
     this.parentID = '';
     this.name = name;
     this.index = index;
@@ -20,6 +22,6 @@ export class Subtask {
     this.epoc = 0;
     this.turns = 0;
     this.tokens = 0;
-    this.retry = retry;
+    this.retryCounter = retryCounter;
   }
 }

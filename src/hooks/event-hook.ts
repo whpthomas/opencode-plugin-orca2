@@ -22,18 +22,20 @@ async function cleanupSubtask(client: any, sessionID: string): Promise<boolean> 
           subtaskMap.delete(subtask.parentID);
         }
       }
-    } else if(subtask.retry < 3) {
-        await client.session.prompt({
-            path: { id: sessionID },
-            body: {
-                parts: [{
-                    type: "text",
-                    text: "Please Continue"
-                }]
-            }
-        });
-        subtask.retry++;
-        return false;
+    } else if(subtask.retryCounter(false) < 3) {
+      log('WARN', `Sending 'please continue' prompt to subtask ${subtask.index} '${subtask.name}'`);
+      await client.session.prompt({
+          path: { id: sessionID },
+          body: {
+              parts: [{
+                  type: "text",
+                  text: "Please Continue"
+              }]
+          }
+      });
+      // Increment subtask retry counter
+      subtask.retryCounter(true);
+      return false;
     }
   }
   // Also clean up any child subtasks if this session is a parent
@@ -69,7 +71,7 @@ async function subtaskComplete(sessionID: string) {
       const workflow = state.workflow;
         state.subtaskTokens += tokens;
         workflow.trace(`Subtask ${subtask.index} ${state.stepName} ${subtask.name} completed, ${tokens} tokens, ${remaining} remaining`);
-        state.stats?.endSubtask(sessionID, tokens, subtask.retry);
+        state.stats?.endSubtask(sessionID, tokens, subtask.retryCounter(false));
     }
     if(remaining === 0) {
         subtaskMap.delete(subtask.parentID);
@@ -295,9 +297,6 @@ export async function event(input: any) {
     currentState = await state.update();
 
     switch(currentState) {
-      // @ts-ignore - intentional fallthrough
-      case State.PENDING:
-        workflow.trace('Sending dialog prompt');
       case State.FIRST:
       case State.NEXT:
         const subtasks = state.build(resumed);
@@ -309,15 +308,26 @@ export async function event(input: any) {
           workflow.trace(`${State[currentState]} ${subtasks.length} ${state.stepName} parallel subtasks`);
           await spawnParallelSubtasks(client, sessionID, subtasks, state);
           await waitForSubtask(client, sessionID, state);
-        } else if (state.parallel) {
-          workflow.trace(`${State[currentState]} ${subtasks.length} ${state.stepName} parallel subtask`);
+        } else if (state.subtask || state.parallel) {
+          workflow.trace(`${State[currentState]} ${subtasks.length} ${state.stepName} spawn subtask`);
           await spawnSubtask(client, sessionID, subtasks[0], state);
           await waitForSubtask(client, sessionID, state);
         } else {
           await sequentialTask(client, sessionID, subtasks[0], state);
-          // Return form idle session
           return;
         }
+        break;
+      case State.CONTINUE:
+        log('WARN', `Sending 'please continue' prompt to step '${state.stepName}'`);
+        await client.session.prompt({
+            path: { id: sessionID },
+            body: {
+                parts: [{
+                    type: "text",
+                    text: "Please Continue"
+                }]
+            }
+        });
         break;
       case State.PAUSED:
         workflow.trace('Workflow paused, waiting for user dialog');
