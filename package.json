@@ -1,6 +1,6 @@
 {
   "name": "opencode-plugin-orca2",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "OpenCode plugin for orchestrating agentic workflows via TOML definitions with file-based state management",
   "type": "module",
   "main": "dist/index.js",
